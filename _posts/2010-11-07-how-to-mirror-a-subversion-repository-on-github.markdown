@@ -41,60 +41,42 @@ data (a "bare" repository), maps all refs (like branches and tags) locally inste
 as remote references (ie. prefixing them with "origin/"), and configures the repository to map all
 refs locally in the future.
 
-However, to clone SVN repositories, you need to use `git svn clone`, which (as of git-svn version
-1.7.12.2) doesn't support the `--mirror` option. You can work around this by converting the
-repository to be like a repository created with `git clone --mirror` after the fact. First, run the
-command below to create a normal Git clone of the SVN repository.
+However, to clone SVN repositories, you need to use `git-svn`, which (as of git-svn version
+1.7.12.2) doesn't support the `--mirror` option. However, you can get the same result by breaking
+the action down to a few more component steps.
 
-    git svn clone --stdlayout http://sequel-pro.googlecode.com/svn sequel-pro
+To start wih, initialize and enter a bare repository for your mirror:
 
-The `--stdlayout` command tells `git svn clone` to fetch the master branch from `trunk`, the other
-branches from `branches`, and the tags from `tags`. If the SVN repository is using another,
-non-standard layout, you can specify the paths with `-T`, `-t`, and `-b` arguments, respectively
-(see the [git-svn man page][]).
-
-For most repositories, the above command will take a long time. It's basically iterating over every
-single revision in the subversion repository and committing them to the git repository. The good
-news is that, once it's setup, subsequent syncs will _not_ take long at all since it will only have
-to process the new revisions since last time. In the meantime, if you haven't already done it, this
-would be a perfect time to login to your GitHub account and create a new repository into which we
-can push all of this. Otherwise, go get a snack or something.
-
-Once it's done setting up the repository locally, the first step to make the repository into a
-mirror is to make it bare. A bare repository is just the `.git` directory from a regular Git
-repository, with an additional config option to stop Git from trying to find and use a working copy
-for development. To start, move the .git directory out of the working directory to stand on its
-own: conventionally, the bare equivalent of a non-bare Git repository is the name of the repository
-followed by `.git` (you can see this at the end of GitHub URLs, for instance).
-
-    mv sequel-pro/.git sequel-pro.git
-    
-At this point you may remove the working copy of the files made during `git svn clone`:
-
-    rm -rf sequel-pro # NOT sequel-pro.git! That would delete the repository!
-
-After you've moved the Git repository, you need to change to the repository directory and tell Git
-that it's a bare repo now:
-
+    git init --bare sequel-pro.git
     cd sequel-pro.git
-    git config core.bare true
     
-Now you need to change the refs made by `git svn clone` to map to the local repository. There are
-two parts to this: first, you must move the existing refs, then you modify the refspecs in the
-config section for the SVN remote.
+Once you've initialized the bare repository, run this command to prepare the repository for working
+with the SVN repository.
 
-    mv refs/remotes/tags/* refs/tags
-    rm -r refs/remotes/tags/ # You don't want to accidentally move your tags into branches
-    rm refs/remotes/trunk # remotes/trunk will be obsolete to master after making these changes
-    mv refs/remotes/* refs/heads/
+    git --git-dir=. svn init http://sequel-pro.googlecode.com/svn
+    
+By default, `git svn init` is set up to keep all refs (branches and tags) from the SVN repository
+separate from those that are local. This is not what you want for a mirror, so use these commands
+to change the refspecs (paths to pull refs from and to) to something appropriate for a mirror:
+
     git config svn-remote.svn.fetch trunk:refs/heads/master
     git config svn-remote.svn.branches branches/*:refs/heads/*
     git config svn-remote.svn.tags tags/*:refs/tags/*
 
-Once you've finished converting the repo to a mirror, you can push it to GitHub by changing to
-the directory to which you cloned the repository, adding a reference to the GitHub repository
-(a remote), and then pushing your main branch to the remote repository on GitHub using the three
-commands below.
+Once your Git repo is ready, you can fetch everything from the SVN repo with this command:
+
+    git svn fetch
+
+For most repositories, the above command will take a long time. It's basically iterating over every
+single revision in every single branch of the subversion repository and committing them to the git
+repository. The good news is that, once it's setup, subsequent syncs will _not_ take long at all
+since it will only have to process the new revisions since last time. In the meantime, if you
+haven't already done it, this would be a perfect time to login to your GitHub account and create a
+new repository into which we can push all of this. Otherwise, go get a snack or something.
+
+Once the repository has finished fetching everything, you can push it to GitHub by adding a
+reference to the GitHub repository (a remote), and then pushing your main branch to the remote
+repository on GitHub using the two commands below.
 
     git remote add --mirror=push origin git@github.com:jnrbsn/sequel-pro.git
     git push origin
@@ -117,5 +99,3 @@ create an entry for it in your crontab (which I won't get into since it could ta
 post. Google it— I'm sure you'll figure it out).
 
 That's it. Happy mirroring!
-
-[git-svn man page]: http://www.kernel.org/pub/software/scm/git/docs/git-svn.html
